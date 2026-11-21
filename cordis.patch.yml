@@ -2,7 +2,7 @@
 # 只插入一条 Host 条目，配置项在此处给出默认值，无需改 profile 的任何文件。
 - insert:
     - id: server-503-guard
-      name: dsh-503-guard
+      name: "@ltw2522/dsh-503-guard"
       config:
         # 触发自愈的 failure.code；SERVER 覆盖 DSH 归一化后的全部 5xx（含 503）
         codes:

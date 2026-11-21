@@ -25,8 +25,15 @@
 
 ## 安装
 
+从 npm 装（推荐）：
+
 ```bash
-# 通过 DSH 的 plugin_manager install_bundle，传绝对路径
+npm i @ltw2522/dsh-503-guard
+```
+
+或者在 DSH 里通过 `plugin_manager install_bundle` 指向本仓库的绝对路径（开发调试用）：
+
+```bash
 D:\dsh_workspace\dsh-503-guard
 ```
 

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "503 self-heal guard",
+    "description": "When a model request is rejected by an upstream 5xx (typically 503) and the built-in retries are exhausted, this plugin keeps probing the gateway in the background with exponential backoff and resumes the turn automatically as soon as it answers again.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "dsh-503-guard",
+  "version": "1.0.0",
+  "description": "DSH 服务端故障自愈：模型请求被 5xx（典型 503）拒绝、内置重试耗尽后，在后台持续探测上游是否恢复，一旦恢复自动把这一轮重新拉起来。",
+  "type": "module",
+  "license": "MIT",
+  "author": "dsh-503-guard contributors",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "retry",
+    "503",
+    "server-error",
+    "resilience"
+  ],
+  "engines": {
+    "dsh": ">=0.2.0-0 <0.3.0-0",
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "test-guard.mjs",
+    "test-integration.mjs"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ltw2522/dsh-503-guard.git"
+  },
+  "homepage": "https://github.com/ltw2522/dsh-503-guard#readme",
+  "bugs": {
+    "url": "https://github.com/ltw2522/dsh-503-guard/issues"
+  }
+}

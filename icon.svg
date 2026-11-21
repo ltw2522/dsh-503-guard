@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="503 self-heal guard">
+  <!-- 深色圆角底：与 DSH 深色界面同调，插件列表里不刺眼 -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#1f2430"/>
+  <!-- 心电基线：左半段的平稳信号，代表网关正常 -->
+  <path d="M8 34 H20 L24 26 L30 44 L36 22 L41 34 H56"
+        fill="none" stroke="#4dabf7" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 右侧回环箭头：恢复后自动续跑 -->
+  <path d="M44 18 A12 12 0 1 1 44 46"
+        fill="none" stroke="#f5a524" stroke-width="3"
+        stroke-linecap="round"/>
+  <path d="M44 13 L44 23 L34 18 Z" fill="#f5a524"/>
+</svg>

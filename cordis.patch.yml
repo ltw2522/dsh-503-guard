@@ -1,0 +1,20 @@
+# dsh-503-guard 的 Loader 补丁。
+# 只插入一条 Host 条目，配置项在此处给出默认值，无需改 profile 的任何文件。
+- insert:
+    - id: server-503-guard
+      name: dsh-503-guard
+      config:
+        # 触发自愈的 failure.code；SERVER 覆盖 DSH 归一化后的全部 5xx（含 503）
+        codes:
+          - SERVER
+        # 健康探测地址：返回非 5xx 即判定网关已恢复
+        probeUrl: https://api.deepseek.com/v1/models
+        # 单次探测超时
+        probeTimeoutMs: 8000
+        # 首次探测前等待，之后按 ×2 退避到 maxDelayMs 封顶
+        initialDelayMs: 5000
+        maxDelayMs: 30000
+        # 单个故障点的总等待预算：30 分钟，超时交还默认处理
+        maxWaitMs: 1800000
+        # 在会话里写出「已重试模型请求」进度行
+        announce: true

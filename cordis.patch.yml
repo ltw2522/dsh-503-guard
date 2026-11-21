@@ -18,3 +18,8 @@
         maxWaitMs: 1800000
         # 在会话里写出「已重试模型请求」进度行
         announce: true
+        # 取证日志：每次加载/接管/探测/放行都写一行到 ~/.dsh/dsh-503-guard.log
+        # 事后靠它判断「到底是不是本插件接的球」；设为 false 可整条关掉
+        trace: true
+        # 日志落点，留空即默认 ~/.dsh/dsh-503-guard.log
+        tracePath: ''

@@ -106,3 +106,13 @@ ctx.on("agent/request-error", (payload, next) => track(recover(payload, next)))
 5. 同 turn/step 并发 → 第二份直接交还
 6. 插件卸载 → 在跑的探测收手
 7. 探测抛异常 → 不误判为恢复，继续等
+
+## 取证日志（1.0.1 起）
+
+会话日志只记录「这一轮成功或失败」，看不到 waterfall 内部各个监听器的接力过程，所以判断「插件有没有接管」缺少证据。插件为此维护一条独立旁路日志：
+
+| 落点 | `config.tracePath`，默认 `~/.dsh/dsh-503-guard.log` |
+| 开关 | `config.trace`，默认 `true`；置 false 后整条旁路关闭 |
+| 写入方式 | `appendFileSync` 单行追加，失败静默吞掉 |
+
+写入时机共 6 处：`apply()` 加载、接管、重复命中、每轮探测、恢复确认、预算耗尽或中止交还。

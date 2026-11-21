@@ -58,6 +58,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 /** 插件在 Loader 里的行标识，和 cordis.patch.yml 中的 id 对应。 */
 export const name = 'dsh-503-guard';
@@ -87,6 +90,13 @@ const DEFAULTS = {
   healthyStatusBelow: 500,
   /** 是否往会话里写 llm/retry 事件以驱动界面上的重试行。 */
   announce: true,
+  /**
+   * 取证日志路径。留空则用 ~/.dsh/dsh-503-guard.log。
+   * 插件每次真正接管一次故障都会在这里留痕，事后可据此判断它到底有没有干活。
+   */
+  tracePath: '',
+  /** 是否写取证日志。关掉不影响自愈逻辑，只是事后无法复盘「谁接了球」。 */
+  trace: true,
 };
 
 /**
@@ -167,6 +177,28 @@ export function createRuntime(config, deps = {}) {
   /** 每个 agent 当前正在进行的恢复流程，防止同一故障并发跑出两份。 */
   const inflight = new WeakMap();
 
+  /** 取证日志落到哪里：默认 ~/.dsh/dsh-503-guard.log，可在 config 里改。 */
+  const tracePath = cfg.tracePath || join(homedir(), '.dsh', 'dsh-503-guard.log');
+
+  /** 取证开关：config.trace === false 时整条旁路关掉，恢复逻辑完全不受影响。 */
+  const traceEnabled = cfg.trace !== false;
+
+  /**
+   * 往取证日志追加一行。
+   * 目的只有一个：事后能证明「这次 503 到底有没有被本插件接管」，
+   * 因为 DSH 的会话日志只能看到最终结果，看不到瀑布内部谁接了球。
+   * 写失败一律吞掉——日志是旁路，绝不能因为它把恢复流程带崩。
+   * @param {string} entry - 单行内容，自动补时间戳。
+   */
+  function trace(entry) {
+    if (!traceEnabled) return;
+    try {
+      appendFileSync(tracePath, `${new Date().toISOString()} ${entry}\n`);
+    } catch {
+      // 磁盘满、权限不足都不影响恢复逻辑本身，静默跳过。
+    }
+  }
+
   /**
    * 单次健康探测。
    * 任何非 5xx 的响应、甚至鉴权失败，都代表网关可达，即视为恢复。
@@ -223,7 +255,10 @@ export function createRuntime(config, deps = {}) {
 
     // 同一个 turn/step 已经在恢复了：这次直接交还，避免扇出多份探测。
     const running = inflight.get(agent);
-    if (running !== undefined && running.turn === turn && running.step === step) return next();
+    if (running !== undefined && running.turn === turn && running.step === step) {
+      trace(`命中重复故障 turn=${String(turn)} step=${String(step)}，交还下游`);
+      return next();
+    }
 
     const token = { turn, step, attempts: 0, startedAt: now() };
     inflight.set(agent, token);
@@ -235,6 +270,7 @@ export function createRuntime(config, deps = {}) {
 
     const retryId = randomUUID();
     const deadline = token.startedAt + cfg.maxWaitMs;
+    trace(`接管 turn=${String(turn)} step=${String(step)} code=${String(code)} provider=${String(provider)}`);
     log.info?.(
       `dsh-503-guard: 检测到 ${code}（provider=${String(provider)}），转入后台探测恢复，` +
       `预算 ${Math.round(cfg.maxWaitMs / 1000)}s`
@@ -243,6 +279,7 @@ export function createRuntime(config, deps = {}) {
     while (!fused.aborted) {
       // 预算耗尽：不再无限等下去，交还下游按终态处理。
       if (now() >= deadline) {
+        trace(`预算耗尽 turn=${String(turn)} step=${String(step)}，交还下游`);
         log.warn?.('dsh-503-guard: 等待预算耗尽，交还默认处理');
         if (inflight.get(agent) === token) inflight.delete(agent);
         return next();
@@ -268,6 +305,10 @@ export function createRuntime(config, deps = {}) {
 
       const health = await probeOnce();
       token.attempts += 1;
+      trace(
+        `探测 #${String(token.attempts)} ok=${String(health.ok)} ` +
+        `status=${String(health.status ?? '-')}${health.error ? ` err=${health.error}` : ''}`
+      );
       if (fused.aborted) break;
 
       if (health.ok) {
@@ -279,6 +320,7 @@ export function createRuntime(config, deps = {}) {
           retry: token.attempts,
         });
         if (inflight.get(agent) === token) inflight.delete(agent);
+        trace(`恢复确认 turn=${String(turn)} step=${String(step)}，放行重试`);
         log.info?.(
           `dsh-503-guard: 上游已恢复（status=${String(health.status)}），` +
           `第 ${token.attempts} 次探测后自动续跑`
@@ -294,11 +336,12 @@ export function createRuntime(config, deps = {}) {
 
     // 被中止（用户点了停止 / 插件卸载）：干净地交还下游。
     if (inflight.get(agent) === token) inflight.delete(agent);
+    trace(`恢复中止 turn=${String(turn)} step=${String(step)}，交还下游`);
     log.info?.('dsh-503-guard: 恢复流程被中止，交还默认处理');
     return next();
   }
 
-  return { recover, probeOnce, config: cfg, lifetime, inflight };
+  return { recover, probeOnce, config: cfg, lifetime, inflight, trace };
 }
 
 /**
@@ -308,6 +351,10 @@ export function createRuntime(config, deps = {}) {
  */
 export function apply(ctx, config = {}) {
   const runtime = createRuntime(config, { logger: ctx.logger });
+
+  // 启动即留痕：这样「插件到底加载了没有、加载的是哪一版」不用猜，
+  // 看取证日志最后一行是不是这条就行（每次重载都会新增一行）。
+  runtime.trace(`插件已激活 provider 无关；等待 ${JSON.stringify(runtime.config.codes)} 类故障`);
 
   // 挂到 request-error 瀑布上。返回 Promise 即代表「本监听器还在处理中」，
   // 等待期间 agent 的这一步不会收尾，恢复成功后直接重试。

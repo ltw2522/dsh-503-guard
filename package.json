@@ -1,6 +1,6 @@
 {
   "name": "dsh-503-guard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DSH 服务端故障自愈：模型请求被 5xx（典型 503）拒绝、内置重试耗尽后，在后台持续探测上游是否恢复，一旦恢复自动把这一轮重新拉起来。",
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,7 @@
     "docs",
     "icon.svg",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "test-guard.mjs",
     "test-integration.mjs"

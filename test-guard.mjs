@@ -16,6 +16,8 @@
  * ============================================================================
  */
 
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createRuntime } from './index.js';
 
 let passed = 0;
@@ -64,6 +66,8 @@ function testConfig(extra = {}) {
     jitterRatio: 0,
     probeTimeoutMs: 500,
     maxWaitMs: 5000,
+    // 取证日志落到系统临时目录：自测不该往用户家目录写任何痕迹。
+    tracePath: join(tmpdir(), 'dsh-503-guard-selftest.log'),
     ...extra,
   };
 }

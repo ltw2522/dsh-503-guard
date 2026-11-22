@@ -176,6 +176,12 @@ export function createRuntime(config, deps = {}) {
 
   /** 每个 agent 当前正在进行的恢复流程，防止同一故障并发跑出两份。 */
   const inflight = new WeakMap();
+  /**
+   * 按 turn:step:provider 缓存重试链。DSH 的会话格式要求同一条 policy 链
+   * （turn, step, provider, policyKey）retryId 唯一且 retry 连续 +1，
+   * 所以同一个 step 的多次接管必须复用同一个 retryId 并持续累加计数。
+   */
+  const retryChains = new Map();
 
   /** 取证日志落到哪里：默认 ~/.dsh/dsh-503-guard.log，可在 config 里改。 */
   const tracePath = cfg.tracePath || join(homedir(), '.dsh', 'dsh-503-guard.log');
@@ -268,7 +274,17 @@ export function createRuntime(config, deps = {}) {
       ? lifetime.signal
       : AbortSignal.any([signal, lifetime.signal]);
 
-    const retryId = randomUUID();
+    // 同一 turn/step/provider 的多次接管共用一条重试链，避免格式校验失败
+    for (const key of retryChains.keys()) {
+      if (!key.startsWith(`${String(turn)}:`)) retryChains.delete(key);
+    }
+    const chainKey = `${String(turn)}:${String(step)}:${String(provider)}`;
+    let chain = retryChains.get(chainKey);
+    if (chain === undefined) {
+      chain = { retryId: randomUUID(), retry: 0 };
+      retryChains.set(chainKey, chain);
+    }
+    const retryId = chain.retryId;
     const deadline = token.startedAt + cfg.maxWaitMs;
     trace(`接管 turn=${String(turn)} step=${String(step)} code=${String(code)} provider=${String(provider)}`);
     log.info?.(
@@ -295,7 +311,7 @@ export function createRuntime(config, deps = {}) {
         provider,
         mode: 'normal',
         policyKey: 'dsh-503-guard',
-        retry: token.attempts + 1,
+        retry: (chain.retry += 1),
         maxRetries: 99,
         delayMs: delay,
         failure,
@@ -317,7 +333,7 @@ export function createRuntime(config, deps = {}) {
           retryId,
           turn,
           step,
-          retry: token.attempts,
+          retry: chain.retry,
         });
         if (inflight.get(agent) === token) inflight.delete(agent);
         trace(`恢复确认 turn=${String(turn)} step=${String(step)}，放行重试`);

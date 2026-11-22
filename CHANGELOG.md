@@ -2,6 +2,16 @@
 
 本文件的日期为发布当日。
 
+## 1.0.3 — 2026-11-22
+
+### 修复
+
+- **`llm/retry` 事件链编号违规，会导致整个会话打不开（严重）**。1.0.2 每次 `recover()` 进入时都 `randomUUID()` 新建 `retryId`、`retry` 又从 `token.attempts + 1`（也就是 1）重数；而 DSH 会话格式要求同一个 `(turn, step, provider, policyKey)` 链上 `retryId` 唯一、`retry` 严格 +1 递增。写入阶段不做关系校验，所以现场不报错，但要等会话重新加载时才炸：
+  `SessionFormatError: llm/retry skips its policy attempt sequence`，
+  结果是**该会话历史完全无法打开**（实测一次会话里累计 61 条冲突事件，最典型一处 `retry=1…21` 之后又冒出 `retry=1`）。
+  修法：新增 `retryChains`（按 `turn:step:provider` 缓存 `{retryId, retry}`），同一 step 的多次接管复用同一 `retryId`、`retry` 全局累加；`turn` 切走时清理旧键，避免常驻增长。`llm/retry-started` 的 `retry` 同步取链上当前值。
+- 影响面提示：本次修复只保证**新写入**的事件合规。已经写坏的会话需要用外部工具重编号（按链重排 `retry`、统一 `retryId`），插件不会自动回改历史日志。
+
 ## 1.0.2 — 2026-11-22
 
 ### 变更

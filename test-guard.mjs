@@ -231,6 +231,72 @@ async function caseProbeThrows() {
 }
 
 /**
+ * 用例 8：同一步骤串行两次接管必须共用一条重试链。
+ *
+ * 这是 1.0.3 修的严重缺陷的回归防线：DSH 会话格式要求同一条
+ * (turn, step, provider, policyKey) 链上 retryId 唯一、retry 严格 +1 递增，
+ * 否则会话重新加载时抛 "llm/retry skips its policy attempt sequence"，整个会话打不开。
+ */
+async function caseRetryChainContinuity() {
+  console.log('用例 8：同一步骤两次接管共用一条重试链');
+  const runtime = createRuntime(testConfig({ initialDelayMs: 1, maxWaitMs: 500 }), {
+    logger: quiet,
+    fetch: async () => ({ status: 200 }),
+  });
+  const agent = fakeAgent();
+  // 第一次接管：探测一次即恢复，inflight 随之清空
+  await runtime.recover(
+    { agent, turn: 9, step: 2, provider: 'p', failure: { code: 'SERVER' } },
+    async () => undefined
+  );
+  // 第二次接管：同一个 turn/step，串行进入
+  await runtime.recover(
+    { agent, turn: 9, step: 2, provider: 'p', failure: { code: 'SERVER' } },
+    async () => undefined
+  );
+
+  const retries = agent.events.filter((event) => event.type === 'llm/retry');
+  const ids = new Set(retries.map((event) => event.data.retryId));
+  const numbers = retries.map((event) => event.data.retry);
+  const contiguous = numbers.every((value, index) => value === index + 1);
+
+  check(retries.length === 2, `两次接管共写入 2 条 llm/retry（实际 ${retries.length}）`);
+  check(ids.size === 1, `两条事件共用同一 retryId（实际 ${ids.size} 个）`);
+  check(contiguous, `retry 序号连续递增（实际 ${numbers.join(',') || '空'}）`);
+}
+
+/**
+ * 用例 9：刷新 turn 后重试链重新起量，不会把旧 turn 的序号带过来。
+ */
+async function caseRetryChainIsolation() {
+  console.log('用例 9：不同 turn 各自独立计数');
+  const runtime = createRuntime(testConfig({ initialDelayMs: 1, maxWaitMs: 500 }), {
+    logger: quiet,
+    fetch: async () => ({ status: 200 }),
+  });
+  const agent = fakeAgent();
+  await runtime.recover(
+    { agent, turn: 10, step: 1, provider: 'p', failure: { code: 'SERVER' } },
+    async () => undefined
+  );
+  await runtime.recover(
+    { agent, turn: 11, step: 1, provider: 'p', failure: { code: 'SERVER' } },
+    async () => undefined
+  );
+
+  const retries = agent.events.filter((event) => event.type === 'llm/retry');
+  check(retries.length === 2, `两个 turn 各写入 1 条 llm/retry（实际 ${retries.length}）`);
+  check(
+    retries.every((event) => event.data.retry === 1),
+    '每个 turn 的重试序号都从 1 开始'
+  );
+  check(
+    new Set(retries.map((event) => event.data.retryId)).size === 2,
+    '不同 turn 使用不同 retryId'
+  );
+}
+
+/**
  * 主流程。
  */
 async function main() {
@@ -242,6 +308,8 @@ async function main() {
   await caseDedup();
   await caseDispose();
   await caseProbeThrows();
+  await caseRetryChainContinuity();
+  await caseRetryChainIsolation();
   console.log(`\n结果：${passed} 通过 / ${failed} 失败`);
   process.exit(failed === 0 ? 0 : 1);
 }
